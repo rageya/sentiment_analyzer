@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentiment Analyzer</title>
+
+  <!-- Fonts: Playfair Display (editorial serif) + Outfit (clean sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --ink:       #111318;
+      --paper:     #f5f0e8;
+      --paper2:    #ede8df;
+      --line:      #d6cfc3;
+      --muted:     #8a8070;
+
+      --pos:       #1a7a4a;
+      --pos-bg:    #eaf7ef;
+      --pos-mid:   #4ade80;
+
+      --neg:       #b91c1c;
+      --neg-bg:    #fef2f2;
+      --neg-mid:   #f87171;
+
+      --neu:       #78716c;
+      --neu-bg:    #f5f0e8;
+      --neu-mid:   #a8a29e;
+
+      --accent:    #c2410c;   /* burnt orange — editorial pop */
+      --radius:    12px;
+      --ease:      cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 1rem 4rem;
+    }
+
+    /* ── Grain overlay ──────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0; opacity: .5;
+    }
+
+    /* ── Masthead ────────────────────────────────────────────────── */
+    header {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 740px;
+      border-bottom: 2px solid var(--ink);
+      padding: 2.5rem 0 1.2rem;
+      margin-bottom: 3rem;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 1rem;
+      animation: fadeDown .5s var(--ease) both;
+    }
+
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .masthead-left {}
+    .issue-tag {
+      font-size: .68rem;
+      font-weight: 600;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: .4rem;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.2rem, 6vw, 3.4rem);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -.02em;
+    }
+
+    .masthead-right {
+      text-align: right;
+      font-size: .75rem;
+      color: var(--muted);
+      line-height: 1.7;
+      padding-bottom: .1rem;
+    }
+    .masthead-right strong { color: var(--ink); font-weight: 600; }
+
+    /* ── Main wrapper ───────────────────────────────────────────── */
+    main {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 740px;
+    }
+
+    /* ── Section label ──────────────────────────────────────────── */
+    .section-label {
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: .65rem;
+    }
+
+    /* ── Textarea ───────────────────────────────────────────────── */
+    .input-area {
+      animation: fadeUp .5s .1s var(--ease) both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 160px;
+      resize: vertical;
+      background: #fff;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius);
+      font-family: 'Outfit', sans-serif;
+      font-size: 1rem;
+      line-height: 1.7;
+      color: var(--ink);
+      padding: 1.1rem 1.25rem;
+      outline: none;
+      transition: border-color .2s var(--ease), box-shadow .2s var(--ease);
+    }
+    textarea::placeholder { color: #c4bdb3; }
+    textarea:focus {
+      border-color: var(--ink);
+      box-shadow: 4px 4px 0 var(--ink);
+    }
+
+    /* ── Toolbar row ────────────────────────────────────────────── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: .75rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .char-count {
+      font-size: .78rem;
+      color: var(--muted);
+    }
+    .char-count span { color: var(--ink); font-weight: 500; }
+
+    .btn-row { display: flex; gap: .6rem; }
+
+    button {
+      font-family: 'Outfit', sans-serif;
+      font-size: .875rem;
+      font-weight: 600;
+      border: 1.5px solid var(--ink);
+      border-radius: 100px;
+      padding: .55rem 1.4rem;
+      cursor: pointer;
+      transition: background .15s, color .15s, transform .15s, box-shadow .15s;
+      letter-spacing: .02em;
+    }
+
+    .btn-primary {
+      background: var(--ink);
+      color: var(--paper);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 3px 3px 0 rgba(0,0,0,.2);
+    }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      border-color: var(--line);
+    }
+    .btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+
+    /* ── Result card ────────────────────────────────────────────── */
+    .result-wrap {
+      margin-top: 2.5rem;
+      display: none;
+      animation: fadeUp .4s var(--ease) both;
+    }
+    .result-wrap.show { display: block; }
+
+    .result-card {
+      background: #fff;
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    /* Sentiment banner */
+    .result-banner {
+      padding: 2rem 2rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      border-bottom: 1px solid var(--line);
+      transition: background .4s var(--ease);
+    }
+    .result-banner.positive { background: var(--pos-bg); }
+    .result-banner.negative { background: var(--neg-bg); }
+    .result-banner.neutral  { background: var(--neu-bg); }
+
+    .emoji-badge {
+      font-size: 3rem;
+      line-height: 1;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.1));
+      animation: pop .4s var(--ease) both;
+    }
+    @keyframes pop {
+      0%   { transform: scale(.4); opacity: 0; }
+      70%  { transform: scale(1.15); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .banner-text {}
+    .sentiment-label {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: .3rem;
+    }
+    .positive .sentiment-label { color: var(--pos); }
+    .negative .sentiment-label { color: var(--neg); }
+    .neutral  .sentiment-label { color: var(--neu); }
+
+    .confidence-text {
+      font-size: .82rem;
+      color: var(--muted);
+    }
+    .confidence-text strong { color: var(--ink); font-weight: 600; }
+
+    /* Bar section */
+    .result-body { padding: 1.5rem 2rem; }
+
+    .bars-title {
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1.1rem;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: .85rem;
+      margin-bottom: .85rem;
+    }
+    .bar-label {
+      width: 68px;
+      font-size: .82rem;
+      font-weight: 500;
+      color: var(--ink);
+      flex-shrink: 0;
+    }
+    .bar-track {
+      flex: 1;
+      height: 10px;
+      background: var(--paper2);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 100px;
+      width: 0;
+      transition: width .8s var(--ease);
+    }
+    .bar-fill.positive { background: var(--pos-mid); }
+    .bar-fill.negative { background: var(--neg-mid); }
+    .bar-fill.neutral  { background: var(--neu-mid); }
+
+    .bar-pct {
+      width: 40px;
+      text-align: right;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    /* Meta row */
+    .meta-row {
+      display: flex;
+      gap: 1.5rem;
+      padding: 1rem 2rem;
+      border-top: 1px solid var(--line);
+      background: var(--paper);
+    }
+    .meta-item {
+      font-size: .75rem;
+      color: var(--muted);
+    }
+    .meta-item strong { color: var(--ink); font-size: .85rem; font-weight: 600; }
+
+    /* ── Error box ──────────────────────────────────────────────── */
+    .error-box {
+      margin-top: 1.25rem;
+      padding: .9rem 1.1rem;
+      background: var(--neg-bg);
+      border: 1px solid rgba(185,28,28,.2);
+      border-radius: var(--radius);
+      font-size: .875rem;
+      color: var(--neg);
+      display: none;
+    }
+    .error-box.show { display: block; }
+
+    /* ── Sample chips ───────────────────────────────────────────── */
+    .samples {
+      margin-top: 2.5rem;
+      animation: fadeUp .5s .2s var(--ease) both;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-top: .65rem;
+    }
+    .chip {
+      padding: .4rem .9rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 100px;
+      font-size: .78rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color .15s, color .15s, box-shadow .15s;
+      white-space: nowrap;
+    }
+    .chip:hover {
+      border-color: var(--ink);
+      color: var(--ink);
+      box-shadow: 2px 2px 0 var(--ink);
+    }
+    .chip.pos { border-color: rgba(26,122,74,.3); color: var(--pos); }
+    .chip.neg { border-color: rgba(185,28,28,.3); color: var(--neg); }
+    .chip.neu { border-color: rgba(120,113,108,.3); color: var(--neu); }
+
+    /* ── Loading state ──────────────────────────────────────────── */
+    .btn-primary.loading::after {
+      content: '';
+      display: inline-block;
+      width: 12px; height: 12px;
+      border: 2px solid rgba(245,240,232,.4);
+      border-top-color: var(--paper);
+      border-radius: 50%;
+      animation: spin .65s linear infinite;
+      margin-left: .5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer ─────────────────────────────────────────────────── */
+    footer {
+      margin-top: 3.5rem;
+      text-align: center;
+      font-size: .72rem;
+      color: var(--muted);
+      position: relative; z-index: 1;
+      border-top: 1px solid var(--line);
+      padding-top: 1.25rem;
+      width: 100%; max-width: 740px;
+    }
+
+    /* ── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 520px) {
+      header { flex-direction: column; align-items: flex-start; }
+      .masthead-right { text-align: left; }
+      .result-banner { padding: 1.5rem; gap: 1rem; }
+      .result-body   { padding: 1.25rem 1.5rem; }
+      .meta-row      { padding: .9rem 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Masthead ─────────────────────────────────────────────────────────── -->
+<header>
+  <div class="masthead-left">
+    <div class="issue-tag">ADL Capstone · Assignment 13</div>
+    <h1>Sentiment<br/>Analyzer</h1>
+  </div>
+  <div class="masthead-right">
+    <strong>Model</strong><br/>TF-IDF + Logistic Regression<br/>
+    <strong>Classes</strong><br/>Positive · Negative · Neutral
+  </div>
+</header>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Input -->
+  <div class="input-area">
+    <div class="section-label">Enter text to analyse</div>
+    <textarea id="textInput" placeholder="Paste a review, tweet, comment, or any text…" maxlength="5000" oninput="updateCount()"></textarea>
+
+    <div class="toolbar">
+      <div class="char-count"><span id="charCount">0</span> / 5000 characters</div>
+      <div class="btn-row">
+        <button class="btn-ghost" onclick="clearAll()">Clear</button>
+        <button class="btn-primary" id="analyseBtn" onclick="analyse()">Analyse Sentiment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- Result -->
+  <div class="result-wrap" id="resultWrap">
+    <div class="section-label">Analysis result</div>
+    <div class="result-card">
+
+      <!-- Banner -->
+      <div class="result-banner" id="resultBanner">
+        <div class="emoji-badge" id="resultEmoji"></div>
+        <div class="banner-text">
+          <div class="sentiment-label" id="resultLabel"></div>
+          <div class="confidence-text" id="resultConf"></div>
+        </div>
+      </div>
+
+      <!-- Probability bars -->
+      <div class="result-body">
+        <div class="bars-title">Probability Breakdown</div>
+
+        <div class="bar-row">
+          <span class="bar-label">Positive</span>
+          <div class="bar-track"><div class="bar-fill positive" id="barPos"></div></div>
+          <span class="bar-pct" id="pctPos">—</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">Negative</span>
+          <div class="bar-track"><div class="bar-fill negative" id="barNeg"></div></div>
+          <span class="bar-pct" id="pctNeg">—</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">Neutral</span>
+          <div class="bar-track"><div class="bar-fill neutral" id="barNeu"></div></div>
+          <span class="bar-pct" id="pctNeu">—</span>
+        </div>
+      </div>
+
+      <!-- Meta -->
+      <div class="meta-row">
+        <div class="meta-item">Words<br/><strong id="metaWords">—</strong></div>
+        <div class="meta-item">Confidence<br/><strong id="metaConf">—</strong></div>
+        <div class="meta-item">Prediction<br/><strong id="metaPred">—</strong></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Sample chips -->
+  <div class="samples">
+    <div class="section-label">Try a sample</div>
+    <div class="chips">
+      <span class="chip pos" onclick="loadSample(this)">I absolutely loved this product!</span>
+      <span class="chip pos" onclick="loadSample(this)">Exceptional service, highly recommended.</span>
+      <span class="chip neg" onclick="loadSample(this)">Terrible quality, complete waste of money.</span>
+      <span class="chip neg" onclick="loadSample(this)">Worst experience I have ever had.</span>
+      <span class="chip neu" onclick="loadSample(this)">The product is okay, nothing special.</span>
+      <span class="chip neu" onclick="loadSample(this)">It works as expected, nothing more.</span>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Footer ─────────────────────────────────────────────────────────────── -->
+<footer>
+  Built with <strong>FastAPI · Scikit-Learn · TF-IDF</strong> &nbsp;·&nbsp; ADL Assignment 13 Capstone
+</footer>
+
+<script>
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const $  = id => document.getElementById(id);
+  const ta = $('textInput');
+
+  function updateCount() {
+    $('charCount').textContent = ta.value.length;
+  }
+
+  function clearAll() {
+    ta.value = '';
+    updateCount();
+    $('resultWrap').classList.remove('show');
+    $('errorBox').classList.remove('show');
+  }
+
+  function loadSample(el) {
+    ta.value = el.textContent.trim();
+    updateCount();
+    $('errorBox').classList.remove('show');
+    analyse();
+  }
+
+  // ── Core: call FastAPI /predict ──────────────────────────────────────────
+  async function analyse() {
+    const text = ta.value.trim();
+    if (!text) {
+      showError('Please enter some text before analysing.');
+      return;
+    }
+
+    const btn = $('analyseBtn');
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.textContent = 'Analysing';
+    $('errorBox').classList.remove('show');
+
+    try {
+      const res = await fetch('/predict', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ text }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        showError(data.detail || 'Server error. Please try again.');
+        return;
+      }
+
+      renderResult(data);
+
+    } catch (err) {
+      showError('Cannot reach the server. Make sure uvicorn / FastAPI is running.');
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btn.textContent = 'Analyse Sentiment';
+    }
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  function renderResult(d) {
+    const cls = d.sentiment.toLowerCase();
+
+    // Banner
+    const banner = $('resultBanner');
+    banner.className = `result-banner ${cls}`;
+    $('resultEmoji').textContent = d.emoji;
+    $('resultLabel').textContent = d.sentiment;
+    $('resultConf').innerHTML =
+      `Confidence <strong>${(d.confidence * 100).toFixed(1)}%</strong>`;
+
+    // Bars — trigger after a small delay so CSS transition fires
+    const probs = d.probabilities;
+    setTimeout(() => {
+      setBar('barPos', 'pctPos', probs.Positive || 0);
+      setBar('barNeg', 'pctNeg', probs.Negative || 0);
+      setBar('barNeu', 'pctNeu', probs.Neutral  || 0);
+    }, 80);
+
+    // Meta
+    $('metaWords').textContent = d.word_count;
+    $('metaConf').textContent  = `${(d.confidence * 100).toFixed(1)}%`;
+    $('metaPred').textContent  = d.sentiment;
+
+    $('resultWrap').classList.add('show');
+    $('resultWrap').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function setBar(barId, pctId, prob) {
+    $(barId).style.width = `${(prob * 100).toFixed(1)}%`;
+    $(pctId).textContent  = `${(prob * 100).toFixed(1)}%`;
+  }
+
+  function showError(msg) {
+    const box = $('errorBox');
+    box.textContent = `⚠️ ${msg}`;
+    box.classList.add('show');
+    $('resultWrap').classList.remove('show');
+  }
+
+  // Enter key shortcut (Shift+Enter for newline)
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); analyse(); }
+  });
+</script>
+</body>
+</html>

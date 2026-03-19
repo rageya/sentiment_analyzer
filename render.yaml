@@ -1,0 +1,12 @@
+# render.yaml — Render.com one-click deployment config
+# Commit this file at the repository root.
+
+services:
+  - type: web
+    name: sentiment-analyzer
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python train_model.py
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
